@@ -31,7 +31,7 @@ namespace MagicMirror
 
         public override long Length => DecryptedStream.Length;
 
-        public override long Position 
+        public override long Position
         {
             get => DecryptedStream.Position;
             set
@@ -44,8 +44,11 @@ namespace MagicMirror
 
         public Options EncryptionOptions { get; }
 
+        private string Path { get; }
+
         public EncryptedFileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options, Options encryptionOptions)
         {
+            Path = path;
             EncryptionOptions = encryptionOptions;
 
             var realMode = mode;
@@ -57,13 +60,57 @@ namespace MagicMirror
 
             OriginalFileStream = new FileStream(path, realMode, realAccess, share, bufferSize, options);
 
-            DecryptedStream = new MemoryStream();
-            Encryptor.DecryptContent(OriginalFileStream, DecryptedStream, encryptionOptions.PasswordKey);
-            DecryptedStream.Position = 0;
+            if (access == FileAccess.Read && InitializeReadStreamFromCache(path) && DecryptedStream != null)
+            {
+                DecryptedStream.Position = 0;
+            }
+            else
+            {
+                DecryptedStream = new MemoryStream(bufferSize);
+                if (mode != FileMode.CreateNew && mode != FileMode.Create && mode != FileMode.Truncate && access == FileAccess.Read)
+                {
+                    Encryptor.DecryptContent(OriginalFileStream, DecryptedStream, encryptionOptions.PasswordKey);
+                    DecryptedStream.Position = 0;
+                    ExistingStreams[path] = (((MemoryStream)DecryptedStream).ToArray(), DateTime.Now);
+                }
+                else
+                    ExistingStreams.TryRemove(path, out var _);
+
+                DecryptedStream.Position = 0;
+            }
 
             if (mode == FileMode.Append)
                 DecryptedStream.Seek(0, SeekOrigin.End);
 
+        }
+
+        public static void ClearCache()
+        {
+            foreach (var cache in ExistingStreams.ToList())
+            {
+                lock (cache.Value.Content)
+                {
+                    if (DateTime.Now - cache.Value.LastUse > TimeSpan.FromSeconds(2))
+                        ExistingStreams.TryRemove(cache);
+                }
+            }
+        }
+
+
+        private static System.Collections.Concurrent.ConcurrentDictionary<string, (byte[] Content, DateTime LastUse)> ExistingStreams = new System.Collections.Concurrent.ConcurrentDictionary<string, (byte[], DateTime)>();
+        private bool InitializeReadStreamFromCache(string path)
+        {
+            if (ExistingStreams.TryGetValue(path, out var cache))
+            {
+                lock (cache.Content)
+                {
+                    DecryptedStream = new MemoryStream(cache.Content);
+                    ExistingStreams[path] = (cache.Content, DateTime.Now);
+                }
+
+                return true;
+            }
+            return false;
         }
 
         public override void Flush()
@@ -74,6 +121,7 @@ namespace MagicMirror
 
                 OriginalFileStream.Position = 0;
                 DecryptedStream.Position = 0;
+
 
                 OriginalFileStream.Position = 0;
                 Encryptor.EncryptContent(DecryptedStream, OriginalFileStream, EncryptionOptions.PasswordKey);

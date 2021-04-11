@@ -246,10 +246,18 @@ namespace MagicMirror
         public override NtStatus DeleteDirectory(string fileName, IDokanFileInfo info, bool onlyPerformCheck)
         {
             var filePath = GetPath(fileName);
-            var notEmpty = Directory.EnumerateFileSystemEntries(filePath).Any();
+            try
+            {
+                var notEmpty = Directory.EnumerateFileSystemEntries(filePath).Any();
 
-            if (notEmpty)// if dir is not empty it can't be deleted
-                return DokanResult.DirectoryNotEmpty;
+                if (notEmpty)// if dir is not empty it can't be deleted
+                    return DokanResult.DirectoryNotEmpty;
+
+            }
+            catch (Exception)
+            {
+                return NtStatus.Success;
+            }
 
             if (onlyPerformCheck)
                 return DokanResult.Success;
