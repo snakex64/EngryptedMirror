@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "MagicMirror": {
+      "commandName": "Project",
+      "commandLineArgs": "D:\\Server PasswordHere"
+    }
+  }
+}
