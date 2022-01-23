@@ -3,6 +3,9 @@ Open an encrypted folder as a drive in Windows
 
 To use the program, start it specifying the arguments: "letter folder"
 
+## requirements
+Requires the installation of DokanNet. See their installation instructions : https://github.com/dokan-dev/dokany/wiki/Installation
+
 Ex: 
 
 MagicMirror.exe H c:/encrypted_folder
